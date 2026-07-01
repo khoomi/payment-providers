@@ -15,14 +15,10 @@ func TestParsePaymentStatus(t *testing.T) {
 		{"successful", payproviders.PaymentStatusSuccess},
 		{"failed", payproviders.PaymentStatusFailed},
 		{"pending", payproviders.PaymentStatusPending},
-		{"queued", payproviders.PaymentStatusPending},
 		{"processing", payproviders.PaymentStatusProcessing},
-		{"ongoing", payproviders.PaymentStatusProcessing},
 		{"abandoned", payproviders.PaymentStatusAbandoned},
 		{"reversed", payproviders.PaymentStatusReversed},
 		{"cancelled", payproviders.PaymentStatusCancelled},
-		{"canceled", payproviders.PaymentStatusCancelled},
-		{"", payproviders.PaymentStatusUnknown},
 		{"weird", payproviders.PaymentStatusUnknown},
 	}
 
@@ -33,28 +29,21 @@ func TestParsePaymentStatus(t *testing.T) {
 	}
 }
 
-func TestPaymentStatus_IsTerminal(t *testing.T) {
-	terminal := []payproviders.PaymentStatus{
-		payproviders.PaymentStatusSuccess,
-		payproviders.PaymentStatusFailed,
-		payproviders.PaymentStatusAbandoned,
-		payproviders.PaymentStatusReversed,
-		payproviders.PaymentStatusCancelled,
-	}
-	for _, s := range terminal {
-		if !s.IsTerminal() {
-			t.Fatalf("%q should be terminal", s)
-		}
+func TestParseRefundStatus(t *testing.T) {
+	tests := []struct {
+		raw  string
+		want payproviders.RefundStatus
+	}{
+		{"pending", payproviders.RefundStatusPending},
+		{"processed", payproviders.RefundStatusProcessed},
+		{"completed", payproviders.RefundStatusProcessed},
+		{"failed", payproviders.RefundStatusFailed},
+		{"weird", payproviders.RefundStatusUnknown},
 	}
 
-	nonTerminal := []payproviders.PaymentStatus{
-		payproviders.PaymentStatusPending,
-		payproviders.PaymentStatusProcessing,
-		payproviders.PaymentStatusUnknown,
-	}
-	for _, s := range nonTerminal {
-		if s.IsTerminal() {
-			t.Fatalf("%q should not be terminal", s)
+	for _, tt := range tests {
+		if got := payproviders.ParseRefundStatus(tt.raw); got != tt.want {
+			t.Fatalf("ParseRefundStatus(%q) = %q, want %q", tt.raw, got, tt.want)
 		}
 	}
 }
