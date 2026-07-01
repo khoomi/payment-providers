@@ -33,6 +33,44 @@ func TestParsePaymentStatus(t *testing.T) {
 	}
 }
 
+func TestParseRefundStatus(t *testing.T) {
+	tests := []struct {
+		raw  string
+		want payproviders.RefundStatus
+	}{
+		{"pending", payproviders.RefundStatusPending},
+		{"queued", payproviders.RefundStatusPending},
+		{"processing", payproviders.RefundStatusProcessing},
+		{"processed", payproviders.RefundStatusProcessed},
+		{"success", payproviders.RefundStatusProcessed},
+		{"completed", payproviders.RefundStatusProcessed},
+		{"failed", payproviders.RefundStatusFailed},
+		{"", payproviders.RefundStatusUnknown},
+	}
+
+	for _, tt := range tests {
+		if got := payproviders.ParseRefundStatus(tt.raw); got != tt.want {
+			t.Fatalf("ParseRefundStatus(%q) = %q, want %q", tt.raw, got, tt.want)
+		}
+	}
+}
+
+func TestRefundStatus_IsAccepted(t *testing.T) {
+	accepted := []payproviders.RefundStatus{
+		payproviders.RefundStatusProcessed,
+		payproviders.RefundStatusPending,
+		payproviders.RefundStatusProcessing,
+	}
+	for _, s := range accepted {
+		if !s.IsAccepted() {
+			t.Fatalf("%q should be accepted", s)
+		}
+	}
+	if payproviders.RefundStatusFailed.IsAccepted() {
+		t.Fatal("failed should not be accepted")
+	}
+}
+
 func TestPaymentStatus_IsTerminal(t *testing.T) {
 	terminal := []payproviders.PaymentStatus{
 		payproviders.PaymentStatusSuccess,

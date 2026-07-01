@@ -19,6 +19,7 @@ const baseURL = "https://api.flutterwave.com/v3"
 
 type Config struct {
 	SecretKey   string
+	BaseURL     string
 	WebhookHash string
 	HTTPClient  *http.Client
 	Logger      *slog.Logger
@@ -45,10 +46,15 @@ func New(cfg Config) *Provider {
 		webhookHash = cfg.SecretKey
 	}
 
+	apiURL := cfg.BaseURL
+	if apiURL == "" {
+		apiURL = baseURL
+	}
+
 	return &Provider{
 		client: payproviders.NewHTTPClient(payproviders.ClientConfig{
 			Name:       payproviders.NameFlutterwave,
-			BaseURL:    baseURL,
+			BaseURL:    apiURL,
 			SecretKey:  cfg.SecretKey,
 			HTTPClient: httpClient,
 			Logger:     cfg.Logger,
@@ -127,6 +133,7 @@ func (fws *Provider) Verify(ctx context.Context, reference string) (*payprovider
 		Status  string `json:"status"`
 		Message string `json:"message"`
 		Data    struct {
+			ID        int64   `json:"id"`
 			Status    string  `json:"status"`
 			TxRef     string  `json:"tx_ref"`
 			Amount    float64 `json:"amount"`
@@ -161,6 +168,64 @@ func (fws *Provider) Verify(ctx context.Context, reference string) (*payprovider
 		PaidAt:          paidAt,
 		GatewayResponse: response.Data.Processor,
 		Raw:             rawMap,
+	}, nil
+}
+
+func (fws *Provider) Refund(ctx context.Context, req payproviders.RefundRequest) (*payproviders.RefundResult, error) {
+	if req.GatewayTransactionID <= 0 {
+		return nil, errors.New("flutterwave transaction id is required")
+	}
+
+	payload := map[string]any{}
+	if req.Amount > 0 {
+		payload["amount"] = koboToMajorUnit(req.Amount)
+	}
+	if req.CustomerNote != "" {
+		payload["comments"] = req.CustomerNote
+	}
+
+	endpoint := fmt.Sprintf("/transactions/%d/refund", req.GatewayTransactionID)
+	body, err := fws.client.Post(ctx, endpoint, payload)
+	if err != nil {
+		return nil, err
+	}
+
+	var response struct {
+		Status  string `json:"status"`
+		Message string `json:"message"`
+		Data    struct {
+			ID             int64   `json:"id"`
+			AmountRefunded float64 `json:"amount_refunded"`
+			Status         string  `json:"status"`
+			FlwRef         string  `json:"flw_ref"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+	if response.Status != "success" {
+		return nil, fmt.Errorf("flutterwave refund failed: %s", response.Message)
+	}
+
+	raw, _ := json.Marshal(response.Data)
+	var rawMap map[string]any
+	_ = json.Unmarshal(raw, &rawMap)
+
+	ref := response.Data.FlwRef
+	if ref == "" {
+		ref = fmt.Sprintf("%d", response.Data.ID)
+	}
+
+	amount := majorUnitToKobo(response.Data.AmountRefunded)
+	if amount == 0 && req.Amount > 0 {
+		amount = req.Amount
+	}
+
+	return &payproviders.RefundResult{
+		Reference: ref,
+		Status:    payproviders.ParseRefundStatus(response.Data.Status),
+		Amount:    amount,
+		Raw:       rawMap,
 	}, nil
 }
 

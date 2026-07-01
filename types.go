@@ -105,3 +105,60 @@ type AccountValidation struct {
 	AccountName   string `json:"account_name"`
 	BankID        int    `json:"bank_id"`
 }
+
+// RefundStatus is the normalized refund outcome across payment gateways.
+type RefundStatus string
+
+const (
+	RefundStatusPending    RefundStatus = "pending"
+	RefundStatusProcessing RefundStatus = "processing"
+	RefundStatusProcessed  RefundStatus = "processed"
+	RefundStatusFailed     RefundStatus = "failed"
+	RefundStatusUnknown    RefundStatus = "unknown"
+)
+
+func ParseRefundStatus(raw string) RefundStatus {
+	switch raw {
+	case "pending", "queued":
+		return RefundStatusPending
+	case "processing", "ongoing":
+		return RefundStatusProcessing
+	case "processed", "success", "successful", "completed":
+		return RefundStatusProcessed
+	case "failed":
+		return RefundStatusFailed
+	default:
+		return RefundStatusUnknown
+	}
+}
+
+func (s RefundStatus) IsSuccessful() bool {
+	return s == RefundStatusProcessed
+}
+
+// IsAccepted reports whether the gateway accepted the refund request.
+// Paystack often returns "pending" while the refund is queued asynchronously.
+func (s RefundStatus) IsAccepted() bool {
+	switch s {
+	case RefundStatusProcessed, RefundStatusPending, RefundStatusProcessing:
+		return true
+	default:
+		return false
+	}
+}
+
+type RefundRequest struct {
+	TransactionReference string
+	GatewayTransactionID int64
+	Amount               int64
+	Currency             string
+	CustomerNote         string
+}
+
+type RefundResult struct {
+	Reference string
+	Status    RefundStatus
+	Amount    int64
+	Currency  string
+	Raw       map[string]any
+}

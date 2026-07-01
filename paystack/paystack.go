@@ -17,6 +17,7 @@ const baseURL = "https://api.paystack.co"
 
 type Config struct {
 	SecretKey  string
+	BaseURL    string
 	HTTPClient *http.Client
 	Logger     *slog.Logger
 }
@@ -37,11 +38,16 @@ func New(cfg Config) *Provider {
 		}
 	}
 
+	apiURL := cfg.BaseURL
+	if apiURL == "" {
+		apiURL = baseURL
+	}
+
 	return &Provider{
 		secretKey: cfg.SecretKey,
 		client: payproviders.NewHTTPClient(payproviders.ClientConfig{
 			Name:       payproviders.NamePaystack,
-			BaseURL:    baseURL,
+			BaseURL:    apiURL,
 			SecretKey:  cfg.SecretKey,
 			HTTPClient: httpClient,
 			Logger:     cfg.Logger,
@@ -117,6 +123,47 @@ func (ps *Provider) Verify(ctx context.Context, reference string) (*payproviders
 		PaidAt:          verifyResponse.Data.PaidAt,
 		GatewayResponse: verifyResponse.Data.GatewayResponse,
 		Raw:             rawMap,
+	}, nil
+}
+
+func (ps *Provider) Refund(ctx context.Context, req payproviders.RefundRequest) (*payproviders.RefundResult, error) {
+	if req.TransactionReference == "" {
+		return nil, errors.New("paystack transaction reference is required")
+	}
+
+	payload := map[string]any{
+		"transaction": req.TransactionReference,
+	}
+	if req.Amount > 0 {
+		payload["amount"] = req.Amount
+	}
+	if req.CustomerNote != "" {
+		payload["customer_note"] = req.CustomerNote
+	}
+
+	body, err := ps.client.Post(ctx, "/refund", payload)
+	if err != nil {
+		return nil, err
+	}
+
+	var response refundResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+	if !response.Status {
+		return nil, fmt.Errorf("paystack refund failed: %s", response.Message)
+	}
+
+	raw, _ := json.Marshal(response.Data)
+	var rawMap map[string]any
+	_ = json.Unmarshal(raw, &rawMap)
+
+	return &payproviders.RefundResult{
+		Reference: fmt.Sprintf("%d", response.Data.ID),
+		Status:    payproviders.ParseRefundStatus(response.Data.Status),
+		Amount:    response.Data.Amount,
+		Currency:  response.Data.Currency,
+		Raw:       rawMap,
 	}, nil
 }
 
@@ -218,6 +265,17 @@ type verifyResponse struct {
 		Currency        string    `json:"currency"`
 		PaidAt          time.Time `json:"paid_at"`
 		GatewayResponse string    `json:"gateway_response"`
+	} `json:"data"`
+}
+
+type refundResponse struct {
+	Status  bool   `json:"status"`
+	Message string `json:"message"`
+	Data    struct {
+		ID       int64  `json:"id"`
+		Amount   int64  `json:"amount"`
+		Currency string `json:"currency"`
+		Status   string `json:"status"`
 	} `json:"data"`
 }
 
