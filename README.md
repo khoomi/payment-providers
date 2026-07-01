@@ -61,7 +61,7 @@ initResult, err := provider.Initialize(ctx, payproviders.InitRequest{
     Email:       buyerEmail,
     Metadata:    map[string]any{"order_id": orderID},
     CallbackURL: callbackURL,
-    Currency:    "NGN",
+    Currency:    payproviders.CurrencyNGN,
     Reference:   reference,
 })
 // → redirect buyer to initResult.AuthorizationURL
@@ -106,6 +106,20 @@ if !provider.ValidateWebhookSignature(ctx, body, signature) {
 }
 event, err := provider.ParseWebhook(body)
 
+if event.IsRefund() {
+    switch event.RefundStatus {
+    case payproviders.RefundStatusPending, payproviders.RefundStatusProcessing:
+        // acknowledged — wait for a terminal webhook
+    case payproviders.RefundStatusProcessed:
+        // complete refund in your ledger
+    case payproviders.RefundStatusNeedsAttention:
+        // collect buyer bank details and call RetryRefundWithCustomerDetails
+    case payproviders.RefundStatusFailed:
+        // mark refund failed; Paystack credits the merchant
+    }
+    return
+}
+
 switch event.Status {
 case payproviders.PaymentStatusSuccess:
     // fulfil order, credit wallet
@@ -126,6 +140,72 @@ result, err := provider.ValidateAccount(ctx, accountNumber, bankCode)
 // result.AccountName → confirm before saving payout details
 ```
 
+### 6. Refunds — initiate, webhook, and retry
+
+Amounts are in the currency's **minor units** (e.g. kobo for NGN). Use `Currency` and the conversion helpers (`AmountForGateway`, `MinorFromGatewayAmount`) so each gateway gets the right scale.
+
+**Initiate a refund**
+
+```go
+provider, _ := mgr.Get(payproviders.NamePaystack)
+
+result, err := provider.Refund(ctx, payproviders.RefundRequest{
+    TransactionReference: txRef,       // Paystack charge reference
+    Amount:               amountKobo, // 0 = full refund
+    Currency:             payproviders.CurrencyNGN,
+    CustomerNote:         "Order cancelled",
+})
+```
+
+Paystack needs `TransactionReference`. Flutterwave needs `GatewayTransactionID` instead.
+
+**Do not treat sync `pending` as completion.** Paystack often returns `pending` while the refund is queued. Use `RefundStatus.IsAccepted()` to know the gateway accepted the request, and `RefundStatus.IsSuccessful()` only when the refund is actually done (`processed`).
+
+```go
+if result.Status.IsAccepted() {
+    // request accepted — keep internal status as processing
+}
+if result.Status.IsSuccessful() {
+    // rare on sync response; usually arrives via webhook
+}
+```
+
+**Refund webhooks (Paystack)**
+
+`ParseWebhook` sets `Kind: WebhookKindRefund` for `refund.*` events. Prefer `ParseRefundEventType(event.EventType)` — the event name is authoritative:
+
+| Paystack event | Normalized status |
+|----------------|-------------------|
+| `refund.pending` | `pending` |
+| `refund.processing` | `processing` |
+| `refund.needs-attention` | `needs_attention` |
+| `refund.failed` | `failed` |
+| `refund.processed` | `processed` |
+
+Parsed refund webhooks expose:
+
+- `RefundID` — numeric id (retry API path param)
+- `RefundReference` — `TRF_*` reference when present
+- `TransactionReference` — original charge reference
+
+**Retry after `needs-attention` (Paystack only)**
+
+When Paystack cannot return funds to the original payment method, collect the buyer's bank details and retry:
+
+```go
+banks, _ := provider.GetBanks(ctx)
+// resolve bank_id from bank code via Bank.ID
+
+result, err := provider.RetryRefundWithCustomerDetails(ctx, payproviders.RefundRetryRequest{
+    RefundID:      event.RefundID, // numeric, not TRF_*
+    Currency:      payproviders.CurrencyNGN,
+    AccountNumber: accountNumber,
+    BankID:        bankID,         // Paystack numeric bank id as string
+})
+```
+
+Flutterwave returns an error from `RetryRefundWithCustomerDetails` — that flow is Paystack-specific.
+
 ### Environment variables
 
 | Variable | Provider | Used for |
@@ -136,14 +216,23 @@ result, err := provider.ValidateAccount(ctx, accountNumber, bankCode)
 
 ## Included providers
 
-| Provider | Init / Verify | Banks / Resolve | Webhook |
-|----------|---------------|-----------------|---------|
-| Paystack | Yes | Yes | HMAC-SHA512 (`x-paystack-signature`) |
-| Flutterwave | Yes | Yes | `verif-hash` header |
+| Provider | Init / Verify | Refund | Retry (needs-attention) | Banks / Resolve | Webhook |
+|----------|---------------|--------|-------------------------|-----------------|---------|
+| Paystack | Yes | Yes | Yes | Yes | HMAC-SHA512 (`x-paystack-signature`) |
+| Flutterwave | Yes | Yes | No | Yes | `verif-hash` header |
 
 ## Payment statuses
 
 `PaymentStatus` covers `success`, `failed`, `pending`, `processing`, `abandoned`, `reversed`, `cancelled`, and `unknown`. Each provider maps its own API strings through `ParsePaymentStatus`.
+
+## Refund statuses
+
+`RefundStatus` covers `pending`, `processing`, `processed`, `failed`, `needs_attention`, and `unknown`.
+
+- `IsAccepted()` — gateway queued the refund (`pending`, `processing`, or `processed`)
+- `IsSuccessful()` — refund completed (`processed` only)
+
+Paystack refund webhooks should be routed with `ParseRefundEventType`. API response strings use `ParseRefundStatus`.
 
 ## Structure
 

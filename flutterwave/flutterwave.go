@@ -229,6 +229,10 @@ func (fws *Provider) Refund(ctx context.Context, req payproviders.RefundRequest)
 	}, nil
 }
 
+func (fws *Provider) RetryRefundWithCustomerDetails(context.Context, payproviders.RefundRetryRequest) (*payproviders.RefundResult, error) {
+	return nil, errors.New("flutterwave does not support refund retry with customer details")
+}
+
 func (fws *Provider) ValidateWebhookSignature(_ context.Context, _ []byte, signature string) bool {
 	if fws.webhookHash == "" || signature == "" {
 		return false
@@ -323,6 +327,7 @@ func (fws *Provider) ParseWebhook(payload []byte) (*payproviders.WebhookEvent, e
 	}
 
 	event := &payproviders.WebhookEvent{
+		Kind:            payproviders.WebhookKindPayment,
 		EventType:       webhook.Event,
 		Reference:       webhook.Data.TxRef,
 		Amount:          payproviders.MinorFromGatewayAmount(webhook.Data.Amount, payproviders.DefaultCurrency, payproviders.NameFlutterwave),

@@ -80,18 +80,37 @@ type VerifyResult struct {
 	Raw             map[string]any
 }
 
+type WebhookKind string
+
+const (
+	WebhookKindPayment WebhookKind = "payment"
+	WebhookKindRefund  WebhookKind = "refund"
+)
+
 type WebhookEvent struct {
-	EventType       string
-	Reference       string
-	CustomReference string
-	Amount          int64
-	Status          PaymentStatus
-	GatewayResponse string
-	PaidAt          time.Time
-	RawData         map[string]any
+	Kind                 WebhookKind
+	EventType            string
+	Reference            string
+	CustomReference      string
+	TransactionReference string
+	// RefundID is Paystack's numeric refund id (retry API path param).
+	RefundID int64
+	// RefundReference is Paystack's TRF_* refund reference when present.
+	RefundReference   string
+	Amount            int64
+	Status            PaymentStatus
+	RefundStatus      RefundStatus
+	GatewayResponse   string
+	PaidAt            time.Time
+	RawData           map[string]any
+}
+
+func (e *WebhookEvent) IsRefund() bool {
+	return e != nil && e.Kind == WebhookKindRefund
 }
 
 type Bank struct {
+	ID       int    `json:"id"`
 	Name     string `json:"name"`
 	Slug     string `json:"slug"`
 	Code     string `json:"code"`
@@ -110,11 +129,12 @@ type AccountValidation struct {
 type RefundStatus string
 
 const (
-	RefundStatusPending    RefundStatus = "pending"
-	RefundStatusProcessing RefundStatus = "processing"
-	RefundStatusProcessed  RefundStatus = "processed"
-	RefundStatusFailed     RefundStatus = "failed"
-	RefundStatusUnknown    RefundStatus = "unknown"
+	RefundStatusPending        RefundStatus = "pending"
+	RefundStatusProcessing     RefundStatus = "processing"
+	RefundStatusProcessed      RefundStatus = "processed"
+	RefundStatusFailed         RefundStatus = "failed"
+	RefundStatusNeedsAttention RefundStatus = "needs_attention"
+	RefundStatusUnknown        RefundStatus = "unknown"
 )
 
 func ParseRefundStatus(raw string) RefundStatus {
@@ -127,6 +147,27 @@ func ParseRefundStatus(raw string) RefundStatus {
 		return RefundStatusProcessed
 	case "failed":
 		return RefundStatusFailed
+	case "needs-attention", "needs_attention":
+		return RefundStatusNeedsAttention
+	default:
+		return RefundStatusUnknown
+	}
+}
+
+// ParseRefundEventType maps Paystack refund.* webhook event names to a normalized status.
+// Event type is authoritative when present; see https://paystack.com/docs/payments/refunds/
+func ParseRefundEventType(eventType string) RefundStatus {
+	switch eventType {
+	case "refund.pending":
+		return RefundStatusPending
+	case "refund.processing":
+		return RefundStatusProcessing
+	case "refund.needs-attention":
+		return RefundStatusNeedsAttention
+	case "refund.failed":
+		return RefundStatusFailed
+	case "refund.processed":
+		return RefundStatusProcessed
 	default:
 		return RefundStatusUnknown
 	}
@@ -161,4 +202,13 @@ type RefundResult struct {
 	Amount    int64
 	Currency  Currency
 	Raw       map[string]any
+}
+
+// RefundRetryRequest supplies buyer bank details for a Paystack refund in
+// needs-attention status. See POST /refund/retry_with_customer_details/{id}.
+type RefundRetryRequest struct {
+	RefundID      int64
+	Currency      Currency
+	AccountNumber string
+	BankID        string
 }
