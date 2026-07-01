@@ -9,8 +9,6 @@ const (
 	NameFlutterwave Name = "flutterwave"
 )
 
-const DefaultCurrency = "NGN"
-
 // PaymentStatus is the normalized charge outcome across payment gateways.
 type PaymentStatus string
 
@@ -62,7 +60,7 @@ type InitRequest struct {
 	Email       string
 	Metadata    map[string]any
 	CallbackURL string
-	Currency    string
+	Currency    Currency
 	Reference   string
 }
 
@@ -76,7 +74,7 @@ type VerifyResult struct {
 	Status          PaymentStatus
 	Reference       string
 	Amount          int64
-	Currency        string
+	Currency        Currency
 	PaidAt          time.Time
 	GatewayResponse string
 	Raw             map[string]any
@@ -153,7 +151,7 @@ type RefundRequest struct {
 	TransactionReference string
 	GatewayTransactionID int64
 	Amount               int64
-	Currency             string
+	Currency             Currency
 	CustomerNote         string
 }
 
@@ -161,6 +159,6 @@ type RefundResult struct {
 	Reference string
 	Status    RefundStatus
 	Amount    int64
-	Currency  string
+	Currency  Currency
 	Raw       map[string]any
 }

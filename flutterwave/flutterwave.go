@@ -67,10 +67,7 @@ func (fws *Provider) Name() payproviders.Name {
 }
 
 func (fws *Provider) Initialize(ctx context.Context, req payproviders.InitRequest) (*payproviders.InitResult, error) {
-	currency := req.Currency
-	if currency == "" {
-		currency = payproviders.DefaultCurrency
-	}
+	currency := req.Currency.OrDefault()
 
 	txRef := req.Reference
 	if txRef == "" {
@@ -85,7 +82,7 @@ func (fws *Provider) Initialize(ctx context.Context, req payproviders.InitReques
 	payload := map[string]any{
 		"tx_ref":       txRef,
 		"amount":       payproviders.AmountForGateway(req.Amount, currency, payproviders.NameFlutterwave),
-		"currency":     currency,
+		"currency":     currency.String(),
 		"redirect_url": req.CallbackURL,
 		"customer": map[string]string{
 			"email": req.Email,
@@ -159,11 +156,13 @@ func (fws *Provider) Verify(ctx context.Context, reference string) (*payprovider
 		}
 	}
 
+	currency := payproviders.ParseCurrency(response.Data.Currency)
+
 	return &payproviders.VerifyResult{
 		Status:          payproviders.ParsePaymentStatus(response.Data.Status),
 		Reference:       response.Data.TxRef,
-		Amount:          payproviders.MinorFromGatewayAmount(response.Data.Amount, response.Data.Currency, payproviders.NameFlutterwave),
-		Currency:        response.Data.Currency,
+		Currency:        currency,
+		Amount:          payproviders.MinorFromGatewayAmount(response.Data.Amount, currency, payproviders.NameFlutterwave),
 		PaidAt:          paidAt,
 		GatewayResponse: response.Data.Processor,
 		Raw:             rawMap,
@@ -175,10 +174,7 @@ func (fws *Provider) Refund(ctx context.Context, req payproviders.RefundRequest)
 		return nil, errors.New("flutterwave transaction id is required")
 	}
 
-	currency := req.Currency
-	if currency == "" {
-		currency = payproviders.DefaultCurrency
-	}
+	currency := req.Currency.OrDefault()
 
 	payload := map[string]any{}
 	if req.Amount > 0 {

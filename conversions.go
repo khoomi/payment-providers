@@ -7,7 +7,7 @@ import (
 
 // MinorUnitExponent returns the number of decimal places in a currency's major unit.
 // Covers African ISO 4217 codes Khoomi is likely to support; defaults to 2.
-func MinorUnitExponent(currency string) int {
+func MinorUnitExponent(currency Currency) int {
 	switch currency {
 	// No fractional minor unit
 	case "BIF", // Burundian franc
@@ -30,27 +30,27 @@ func MinorUnitExponent(currency string) int {
 }
 
 // MinorToMajorUnit converts an amount in minor units to major units.
-func MinorToMajorUnit(minor int64, currency string) float64 {
+func MinorToMajorUnit(minor int64, currency Currency) float64 {
 	exp := MinorUnitExponent(currency)
 	return float64(minor) / math.Pow10(exp)
 }
 
 // MajorUnitToMinor converts an amount in major units to minor units.
-func MajorUnitToMinor(major float64, currency string) int64 {
+func MajorUnitToMinor(major float64, currency Currency) int64 {
 	exp := MinorUnitExponent(currency)
 	return int64(math.Round(major * math.Pow10(exp)))
 }
 
 // FormatMajorUnitAmount formats minor units as a decimal string for gateways
 // that expect major-unit amounts (e.g. Flutterwave).
-func FormatMajorUnitAmount(minor int64, currency string) string {
+func FormatMajorUnitAmount(minor int64, currency Currency) string {
 	exp := MinorUnitExponent(currency)
 	return strconv.FormatFloat(MinorToMajorUnit(minor, currency), 'f', exp, 64)
 }
 
 // AmountForGateway returns the amount value to send to a gateway API.
 // Paystack expects minor units; Flutterwave expects a major-unit decimal string.
-func AmountForGateway(minor int64, currency string, gateway Name) any {
+func AmountForGateway(minor int64, currency Currency, gateway Name) any {
 	if gateway == NameFlutterwave {
 		return FormatMajorUnitAmount(minor, currency)
 	}
@@ -58,7 +58,7 @@ func AmountForGateway(minor int64, currency string, gateway Name) any {
 }
 
 // MinorFromGatewayAmount parses a gateway response amount into minor units.
-func MinorFromGatewayAmount(major float64, currency string, gateway Name) int64 {
+func MinorFromGatewayAmount(major float64, currency Currency, gateway Name) int64 {
 	if gateway == NameFlutterwave {
 		return MajorUnitToMinor(major, currency)
 	}

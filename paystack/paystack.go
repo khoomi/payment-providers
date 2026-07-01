@@ -60,16 +60,13 @@ func (ps *Provider) Name() payproviders.Name {
 }
 
 func (ps *Provider) Initialize(ctx context.Context, req payproviders.InitRequest) (*payproviders.InitResult, error) {
-	currency := req.Currency
-	if currency == "" {
-		currency = payproviders.DefaultCurrency
-	}
+	currency := req.Currency.OrDefault()
 
 	payload := map[string]any{
 		"amount":   payproviders.AmountForGateway(req.Amount, currency, payproviders.NamePaystack),
 		"email":    req.Email,
 		"metadata": req.Metadata,
-		"currency": currency,
+		"currency": currency.String(),
 	}
 	if req.CallbackURL != "" {
 		payload["callback_url"] = req.CallbackURL
@@ -119,7 +116,7 @@ func (ps *Provider) Verify(ctx context.Context, reference string) (*payproviders
 		Status:          payproviders.ParsePaymentStatus(verifyResponse.Data.Status),
 		Reference:       verifyResponse.Data.Reference,
 		Amount:          verifyResponse.Data.Amount,
-		Currency:        verifyResponse.Data.Currency,
+		Currency:        payproviders.ParseCurrency(verifyResponse.Data.Currency),
 		PaidAt:          verifyResponse.Data.PaidAt,
 		GatewayResponse: verifyResponse.Data.GatewayResponse,
 		Raw:             rawMap,
@@ -134,10 +131,7 @@ func (ps *Provider) Refund(ctx context.Context, req payproviders.RefundRequest) 
 	payload := map[string]any{
 		"transaction": req.TransactionReference,
 	}
-	currency := req.Currency
-	if currency == "" {
-		currency = payproviders.DefaultCurrency
-	}
+	currency := req.Currency.OrDefault()
 
 	if req.Amount > 0 {
 		payload["amount"] = payproviders.AmountForGateway(req.Amount, currency, payproviders.NamePaystack)
@@ -167,7 +161,7 @@ func (ps *Provider) Refund(ctx context.Context, req payproviders.RefundRequest) 
 		Reference: fmt.Sprintf("%d", response.Data.ID),
 		Status:    payproviders.ParseRefundStatus(response.Data.Status),
 		Amount:    response.Data.Amount,
-		Currency:  response.Data.Currency,
+		Currency:  payproviders.ParseCurrency(response.Data.Currency),
 		Raw:       rawMap,
 	}, nil
 }
