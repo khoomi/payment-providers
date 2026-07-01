@@ -10,11 +10,11 @@ func TestMinorUnitExponent(t *testing.T) {
 	if got := payproviders.MinorUnitExponent("NGN"); got != 2 {
 		t.Fatalf("NGN exponent %d, want 2", got)
 	}
-	if got := payproviders.MinorUnitExponent("JPY"); got != 0 {
-		t.Fatalf("JPY exponent %d, want 0", got)
+	if got := payproviders.MinorUnitExponent("XOF"); got != 0 {
+		t.Fatalf("XOF exponent %d, want 0", got)
 	}
-	if got := payproviders.MinorUnitExponent("KWD"); got != 3 {
-		t.Fatalf("KWD exponent %d, want 3", got)
+	if got := payproviders.MinorUnitExponent("LYD"); got != 3 {
+		t.Fatalf("LYD exponent %d, want 3", got)
 	}
 }
 

@@ -6,14 +6,25 @@ import (
 )
 
 // MinorUnitExponent returns the number of decimal places in a currency's major unit.
-// Defaults to 2 when the currency is unknown.
+// Covers African ISO 4217 codes Khoomi is likely to support; defaults to 2.
 func MinorUnitExponent(currency string) int {
 	switch currency {
-	case "BIF", "CLP", "DJF", "GNF", "ISK", "JPY", "KMF", "KRW", "PYG", "RWF", "UGX", "VND", "VUV", "XAF", "XOF", "XPF":
+	// No fractional minor unit
+	case "BIF", // Burundian franc
+		"DJF", // Djiboutian franc
+		"GNF", // Guinean franc
+		"KMF", // Comorian franc
+		"RWF", // Rwandan franc
+		"UGX", // Ugandan shilling
+		"XAF", // Central African CFA franc
+		"XOF": // West African CFA franc
 		return 0
-	case "BHD", "IQD", "JOD", "KWD", "LYD", "OMR", "TND":
+	// Three decimal places
+	case "LYD", // Libyan dinar
+		"TND": // Tunisian dinar
 		return 3
 	default:
+		// NGN, GHS, KES, ZAR, EGP, MAD, TZS, ZMW, and most others
 		return 2
 	}
 }
