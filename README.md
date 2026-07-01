@@ -29,112 +29,102 @@ result, err := p.Initialize(ctx, payproviders.InitRequest{
 })
 ```
 
-## Using in Khoomi (core-api)
+## Using in Khoomi
 
-Khoomi pins this module in `go.mod` and passes a `payproviders.Manager` directly into `payment_service`. There is no second facade in `lib/` — the service layer owns provider selection.
+Khoomi holds a `Manager` with Paystack as the default provider. Flutterwave is registered when configured. The payment service resolves providers by name — no second wrapper layer.
 
 ### 1. Startup — register providers
 
-`lib/container/services.go` builds the manager at container init. Paystack is the default; Flutterwave is registered when configured:
-
 ```go
-// lib/container/services.go
-paymentManager := payproviders.NewManager(payproviders.NamePaystack)
-paymentManager.Register(paystack.New(paystack.Config{
-    SecretKey: cfg.Paystack.SecretKey,
+mgr := payproviders.NewManager(payproviders.NamePaystack)
+
+mgr.Register(paystack.New(paystack.Config{
+    SecretKey: os.Getenv("PAYSTACK_SECRET_KEY"),
 }))
-if cfg.Flutterwave.SecretKey != "" {
-    paymentManager.Register(flutterwave.New(flutterwave.Config{
-        SecretKey:   cfg.Flutterwave.SecretKey,
-        WebhookHash: cfg.Flutterwave.WebhookHash,
+if os.Getenv("FLUTTERWAVE_SECRET_KEY") != "" {
+    mgr.Register(flutterwave.New(flutterwave.Config{
+        SecretKey:   os.Getenv("FLUTTERWAVE_SECRET_KEY"),
+        WebhookHash: os.Getenv("FLUTTERWAVE_WEBHOOK_HASH"),
     }))
 }
-
-paymentService := payment.NewPaymentService(payment.PaymentServiceConfig{
-    DB: db, Cache: runtime.Cache, EventBus: eventBus,
-    WalletService: walletSvc, PlatformService: platformService,
-    Outbox: outboxSvc, Manager: paymentManager,
-})
 ```
 
 ### 2. Checkout — initialize a charge
 
-When a buyer pays for an order, `payment_service` resolves the provider by name, then calls `Initialize` with the transaction reference and amount in kobo:
+When a buyer pays, Khoomi resolves the gateway and calls `Initialize` with the amount in kobo and a unique reference:
 
 ```go
-// services/payment/payment_service.go
-provider, err := ps.GetProvider(selectedProvider) // models.PaymentProvider → payproviders.Name
+provider, _ := mgr.Get(payproviders.NamePaystack)
 
 initResult, err := provider.Initialize(ctx, payproviders.InitRequest{
-    Amount:      int64(tx.Amount),
-    Email:       string(tx.CustomerEmail),
-    Metadata:    tx.Provider.Metadata,
-    CallbackURL: callbackURI.String(),
-    Currency:    string(tx.Currency),
-    Reference:   tx.Reference,
+    Amount:      amountKobo,
+    Email:       buyerEmail,
+    Metadata:    map[string]any{"order_id": orderID},
+    CallbackURL: callbackURL,
+    Currency:    "NGN",
+    Reference:   reference,
 })
-// → store AuthorizationURL, AccessCode, Reference on the transaction
+// → redirect buyer to initResult.AuthorizationURL
 ```
-
-The buyer is redirected to `initResult.AuthorizationURL`. Khoomi generates references like `KHM_<timestamp>_<id>` via `payment.GenerateReference()`.
 
 ### 3. Verify — confirm payment status
 
-After redirect or on polling, Khoomi verifies with the provider and maps normalized statuses into domain transaction states:
+After redirect or polling, Khoomi calls `Verify` and maps the normalized status to its own transaction states:
 
 ```go
-provider, _ := ps.GetProvider(paymentProvider)
+provider, _ := mgr.Get(providerName)
 verifyResult, err := provider.Verify(ctx, reference)
 
 switch verifyResult.Status {
 case payproviders.PaymentStatusSuccess:
-    status = models.TransactionStatusSuccessful
+    // mark paid, credit seller wallet
 case payproviders.PaymentStatusFailed:
-    status = models.TransactionStatusFailed
+    // mark failed
 case payproviders.PaymentStatusAbandoned:
-    status = models.TransactionStatusAbandoned
-// ...
+    // mark abandoned
 }
 ```
 
 ### 4. Webhooks — verify, parse, process
 
-A single webhook endpoint handles both gateways. The handler detects the provider from the signature header, then delegates to the module:
+A single webhook endpoint handles both gateways. Khoomi detects the provider from the signature header, then delegates to the module:
 
 ```go
-// handlers/payment/payment_handler.go
-// Detect provider from header
-if c.GetHeader("x-paystack-signature") != "" {
-    provider = models.PaymentProviderPaystack
-} else if c.GetHeader("verif-hash") != "" {
-    provider = models.PaymentProviderFlutterWave
+var providerName payproviders.Name
+var signature string
+
+if signature = r.Header.Get("x-paystack-signature"); signature != "" {
+    providerName = payproviders.NamePaystack
+} else if signature = r.Header.Get("verif-hash"); signature != "" {
+    providerName = payproviders.NameFlutterwave
 }
 
-// Verify + parse via module
-if !self.paymentService.ValidateWebhookSignature(ctx, provider, body, signature) {
-    // 401
-}
-paymentProvider, _ := self.paymentService.GetProvider(provider)
-parsedEvent, err := paymentProvider.ParseWebhook(body)
+provider, _ := mgr.Get(providerName)
 
-// Process normalized event
-self.paymentService.ProcessWebhookEvent(ctx, provider, parsedEvent)
+if !provider.ValidateWebhookSignature(ctx, body, signature) {
+    return // 401
+}
+event, err := provider.ParseWebhook(body)
+
+switch event.Status {
+case payproviders.PaymentStatusSuccess:
+    // fulfil order, credit wallet
+case payproviders.PaymentStatusFailed, payproviders.PaymentStatusAbandoned:
+    // release inventory, notify buyer
+}
 ```
-
-`ProcessWebhookEvent` maps `payproviders.PaymentStatus` to order/wallet side effects (credit seller wallet on success, mark failed on terminal failure, etc.).
 
 ### 5. Seller payouts — banks and account resolution
 
-Khoomi exposes bank lists and account name resolution for seller payout setup. These use the default provider (Paystack):
+Bank lists and account name resolution for seller payout setup use the default provider (Paystack). Results are cached:
 
 ```go
-// services/payment/payment_service.go
-provider := ps.manager.Default()
-banks, err := provider.GetBanks(ctx)           // cached in Redis
-result, err := provider.ValidateAccount(ctx, accountNumber, bankCode)
-```
+provider := mgr.Default()
 
-`shop/payout_info_service` calls `ValidateAccount` when a seller adds a bank account. Results are exposed at `GET /api/banks` and `GET /api/banks/:code/accounts/:number`.
+banks, err := provider.GetBanks(ctx)
+result, err := provider.ValidateAccount(ctx, accountNumber, bankCode)
+// result.AccountName → confirm before saving payout details
+```
 
 ### Environment variables
 
