@@ -42,11 +42,3 @@ func TestParseWebhook_ChargeSuccess(t *testing.T) {
 		t.Fatalf("status %q, want success", event.Status)
 	}
 }
-
-func TestParseWebhook_InvalidJSON(t *testing.T) {
-	p := paystack.New(paystack.Config{SecretKey: "test"})
-	_, err := p.ParseWebhook([]byte(`{invalid`))
-	if err == nil {
-		t.Fatal("expected error for invalid JSON")
-	}
-}

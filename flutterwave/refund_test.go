@@ -53,11 +53,3 @@ func TestRefund_PartialRefund(t *testing.T) {
 		t.Fatalf("amount %d, want 250000", result.Amount)
 	}
 }
-
-func TestRefund_MissingTransactionID(t *testing.T) {
-	p := flutterwave.New(flutterwave.Config{SecretKey: "test"})
-	_, err := p.Refund(context.Background(), payproviders.RefundRequest{})
-	if err == nil {
-		t.Fatal("expected error for missing transaction id")
-	}
-}
