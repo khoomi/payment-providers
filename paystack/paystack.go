@@ -66,7 +66,7 @@ func (ps *Provider) Initialize(ctx context.Context, req payproviders.InitRequest
 	}
 
 	payload := map[string]any{
-		"amount":   req.Amount,
+		"amount":   payproviders.AmountForGateway(req.Amount, currency, payproviders.NamePaystack),
 		"email":    req.Email,
 		"metadata": req.Metadata,
 		"currency": currency,
@@ -134,8 +134,13 @@ func (ps *Provider) Refund(ctx context.Context, req payproviders.RefundRequest) 
 	payload := map[string]any{
 		"transaction": req.TransactionReference,
 	}
+	currency := req.Currency
+	if currency == "" {
+		currency = payproviders.DefaultCurrency
+	}
+
 	if req.Amount > 0 {
-		payload["amount"] = req.Amount
+		payload["amount"] = payproviders.AmountForGateway(req.Amount, currency, payproviders.NamePaystack)
 	}
 	if req.CustomerNote != "" {
 		payload["customer_note"] = req.CustomerNote

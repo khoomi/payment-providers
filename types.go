@@ -55,6 +55,8 @@ func (s PaymentStatus) IsTerminal() bool {
 	}
 }
 
+// InitRequest amount fields are expressed in the currency's minor units
+// (e.g. kobo for NGN). Use MinorUnitExponent to resolve the scale per currency.
 type InitRequest struct {
 	Amount      int64
 	Email       string

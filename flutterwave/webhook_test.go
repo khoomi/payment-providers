@@ -36,7 +36,7 @@ func TestParseWebhook_ChargeCompleted(t *testing.T) {
 		t.Fatalf("custom reference %q, want KHM_custom_ref", event.CustomReference)
 	}
 	if event.Amount != 250050 {
-		t.Fatalf("amount %d, want 250050 kobo", event.Amount)
+		t.Fatalf("amount %d, want 250050 minor units", event.Amount)
 	}
 	if event.Status != payproviders.PaymentStatusSuccess {
 		t.Fatalf("status %q, want success", event.Status)

@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"strconv"
 	"time"
 
 	payproviders "github.com/khoomi/payment-providers"
@@ -85,7 +84,7 @@ func (fws *Provider) Initialize(ctx context.Context, req payproviders.InitReques
 
 	payload := map[string]any{
 		"tx_ref":       txRef,
-		"amount":       koboToMajorUnit(req.Amount),
+		"amount":       payproviders.AmountForGateway(req.Amount, currency, payproviders.NameFlutterwave),
 		"currency":     currency,
 		"redirect_url": req.CallbackURL,
 		"customer": map[string]string{
@@ -163,7 +162,7 @@ func (fws *Provider) Verify(ctx context.Context, reference string) (*payprovider
 	return &payproviders.VerifyResult{
 		Status:          payproviders.ParsePaymentStatus(response.Data.Status),
 		Reference:       response.Data.TxRef,
-		Amount:          majorUnitToKobo(response.Data.Amount),
+		Amount:          payproviders.MinorFromGatewayAmount(response.Data.Amount, response.Data.Currency, payproviders.NameFlutterwave),
 		Currency:        response.Data.Currency,
 		PaidAt:          paidAt,
 		GatewayResponse: response.Data.Processor,
@@ -176,9 +175,14 @@ func (fws *Provider) Refund(ctx context.Context, req payproviders.RefundRequest)
 		return nil, errors.New("flutterwave transaction id is required")
 	}
 
+	currency := req.Currency
+	if currency == "" {
+		currency = payproviders.DefaultCurrency
+	}
+
 	payload := map[string]any{}
 	if req.Amount > 0 {
-		payload["amount"] = koboToMajorUnit(req.Amount)
+		payload["amount"] = payproviders.AmountForGateway(req.Amount, currency, payproviders.NameFlutterwave)
 	}
 	if req.CustomerNote != "" {
 		payload["comments"] = req.CustomerNote
@@ -216,7 +220,7 @@ func (fws *Provider) Refund(ctx context.Context, req payproviders.RefundRequest)
 		ref = fmt.Sprintf("%d", response.Data.ID)
 	}
 
-	amount := majorUnitToKobo(response.Data.AmountRefunded)
+	amount := payproviders.MinorFromGatewayAmount(response.Data.AmountRefunded, currency, payproviders.NameFlutterwave)
 	if amount == 0 && req.Amount > 0 {
 		amount = req.Amount
 	}
@@ -325,7 +329,7 @@ func (fws *Provider) ParseWebhook(payload []byte) (*payproviders.WebhookEvent, e
 	event := &payproviders.WebhookEvent{
 		EventType:       webhook.Event,
 		Reference:       webhook.Data.TxRef,
-		Amount:          majorUnitToKobo(webhook.Data.Amount),
+		Amount:          payproviders.MinorFromGatewayAmount(webhook.Data.Amount, payproviders.DefaultCurrency, payproviders.NameFlutterwave),
 		Status:          status,
 		GatewayResponse: webhook.Data.ProcessorResponse,
 		RawData:         rawMap,
@@ -341,14 +345,6 @@ func (fws *Provider) ParseWebhook(payload []byte) (*payproviders.WebhookEvent, e
 	}
 
 	return event, nil
-}
-
-func koboToMajorUnit(amount int64) string {
-	return strconv.FormatFloat(float64(amount)/100, 'f', 2, 64)
-}
-
-func majorUnitToKobo(amount float64) int64 {
-	return int64(amount * 100)
 }
 
 var _ payproviders.Provider = (*Provider)(nil)
