@@ -1,4 +1,4 @@
-package paymentproviders
+package payproviders
 
 // Currency is an ISO 4217 African currency code supported by Khoomi gateways.
 type Currency string

@@ -1,4 +1,4 @@
-package paymentproviders
+package payproviders
 
 import "context"
 

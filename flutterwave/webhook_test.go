@@ -3,8 +3,8 @@ package flutterwave_test
 import (
 	"testing"
 
-	payproviders "github.com/khoomi/payment-providers"
-	"github.com/khoomi/payment-providers/flutterwave"
+	payproviders "github.com/khoomi/payproviders"
+	"github.com/khoomi/payproviders/flutterwave"
 )
 
 func TestParseWebhook_ChargeCompleted(t *testing.T) {

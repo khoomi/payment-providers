@@ -6,8 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	payproviders "github.com/khoomi/payment-providers"
-	"github.com/khoomi/payment-providers/paystack"
+	payproviders "github.com/khoomi/payproviders"
+	"github.com/khoomi/payproviders/paystack"
 )
 
 func TestRetryRefundWithCustomerDetails(t *testing.T) {

@@ -1,10 +1,10 @@
-package paymentproviders_test
+package payproviders_test
 
 import (
 	"context"
 	"testing"
 
-	payproviders "github.com/khoomi/payment-providers"
+	payproviders "github.com/khoomi/payproviders"
 )
 
 type stubProvider struct {

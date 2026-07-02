@@ -2,7 +2,7 @@
 
 ## New provider
 
-Implement `paymentproviders.Provider` in its own package. Copy `paystack/` or `flutterwave/` and work from there.
+Implement `payproviders.Provider` in its own package. Copy `paystack/` or `flutterwave/` and work from there.
 
 ### Name
 

@@ -1,9 +1,9 @@
-package paymentproviders_test
+package payproviders_test
 
 import (
 	"testing"
 
-	payproviders "github.com/khoomi/payment-providers"
+	payproviders "github.com/khoomi/payproviders"
 )
 
 func TestParseRefundEventType(t *testing.T) {

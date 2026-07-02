@@ -11,7 +11,7 @@ import (
 	"net/url"
 	"time"
 
-	payproviders "github.com/khoomi/payment-providers"
+	payproviders "github.com/khoomi/payproviders"
 )
 
 const baseURL = "https://api.flutterwave.com/v3"

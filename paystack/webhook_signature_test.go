@@ -6,7 +6,7 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"github.com/khoomi/payment-providers/paystack"
+	"github.com/khoomi/payproviders/paystack"
 )
 
 func signPaystackPayload(secret string, payload []byte) string {

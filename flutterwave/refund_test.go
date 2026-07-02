@@ -6,8 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	payproviders "github.com/khoomi/payment-providers"
-	"github.com/khoomi/payment-providers/flutterwave"
+	payproviders "github.com/khoomi/payproviders"
+	"github.com/khoomi/payproviders/flutterwave"
 )
 
 func TestRefund_PartialRefund(t *testing.T) {

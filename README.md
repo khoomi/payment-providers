@@ -1,4 +1,4 @@
-# payment-providers
+# payproviders
 
 Go client for payment gateways in Africa. [Khoomi](https://khoomi.com) uses it in production.
 
@@ -7,15 +7,15 @@ Paystack and Flutterwave are included. Gateways share a common `Provider` interf
 ## Install
 
 ```bash
-go get github.com/khoomi/payment-providers
+go get github.com/khoomi/payproviders
 ```
 
 ## Quick start
 
 ```go
 import (
-    payproviders "github.com/khoomi/payment-providers"
-    "github.com/khoomi/payment-providers/paystack"
+    payproviders "github.com/khoomi/payproviders"
+    "github.com/khoomi/payproviders/paystack"
 )
 
 mgr := payproviders.NewManager(payproviders.NamePaystack)
@@ -237,7 +237,7 @@ Paystack refund webhooks should be routed with `ParseRefundEventType`. API respo
 ## Structure
 
 ```
-payment-providers/
+payproviders/
 ├── client.go
 ├── types.go
 ├── manager.go
