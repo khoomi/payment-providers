@@ -168,6 +168,10 @@ func (ps *Provider) Refund(ctx context.Context, req payproviders.RefundRequest) 
 	}, nil
 }
 
+func (ps *Provider) GetRefund(context.Context, string) (*payproviders.RefundResult, error) {
+	return nil, errors.New("paystack does not support refund status lookup by id via this client")
+}
+
 func (ps *Provider) RetryRefundWithCustomerDetails(ctx context.Context, req payproviders.RefundRetryRequest) (*payproviders.RefundResult, error) {
 	if req.RefundID <= 0 {
 		return nil, errors.New("paystack refund id is required")

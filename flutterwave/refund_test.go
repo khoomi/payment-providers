@@ -46,8 +46,12 @@ func TestRefund_PartialRefund(t *testing.T) {
 	if result.Reference != "FLW-REF-123" {
 		t.Fatalf("reference %q, want FLW-REF-123", result.Reference)
 	}
-	if result.Status != payproviders.RefundStatusProcessed {
-		t.Fatalf("status %q, want processed", result.Status)
+	// Plain "completed" means initiated / pending disbursement on Flutterwave.
+	if result.Status != payproviders.RefundStatusProcessing {
+		t.Fatalf("status %q, want processing", result.Status)
+	}
+	if result.ID != "223" {
+		t.Fatalf("id %q, want 223", result.ID)
 	}
 	if result.Amount != 250000 {
 		t.Fatalf("amount %d, want 250000", result.Amount)

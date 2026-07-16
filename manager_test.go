@@ -21,6 +21,9 @@ func (s stubProvider) Verify(context.Context, string) (*payproviders.VerifyResul
 func (s stubProvider) Refund(context.Context, payproviders.RefundRequest) (*payproviders.RefundResult, error) {
 	return nil, nil
 }
+func (s stubProvider) GetRefund(context.Context, string) (*payproviders.RefundResult, error) {
+	return nil, nil
+}
 func (s stubProvider) RetryRefundWithCustomerDetails(context.Context, payproviders.RefundRetryRequest) (*payproviders.RefundResult, error) {
 	return nil, nil
 }

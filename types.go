@@ -139,11 +139,16 @@ const (
 
 func ParseRefundStatus(raw string) RefundStatus {
 	switch raw {
-	case "pending", "queued":
+	case "pending", "queued", "pending-momo":
 		return RefundStatusPending
-	case "processing", "ongoing":
+	// Flutterwave "completed" = initiated, pending disbursement (not fully paid out).
+	// https://developer.flutterwave.com/v3.0/docs/refunds
+	case "processing", "ongoing", "completed":
 		return RefundStatusProcessing
-	case "processed", "success", "successful", "completed":
+	// Terminal success: Paystack processed / FW rail-specific completed-*
+	case "processed", "success", "successful",
+		"completed-bank-transfer", "completed-momo", "completed-mpgs",
+		"completed-offline", "completed-preauth":
 		return RefundStatusProcessed
 	case "failed":
 		return RefundStatusFailed
@@ -194,9 +199,13 @@ type RefundRequest struct {
 	Amount               int64
 	Currency             Currency
 	CustomerNote         string
+	// CallbackURL is optional (Flutterwave callbackurl for refund status updates).
+	CallbackURL string
 }
 
 type RefundResult struct {
+	// ID is the gateway refund id (Flutterwave data.id) when present.
+	ID        string
 	Reference string
 	Status    RefundStatus
 	Amount    int64
