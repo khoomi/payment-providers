@@ -169,6 +169,9 @@ func (fws *Provider) Verify(ctx context.Context, reference string) (*payprovider
 	}, nil
 }
 
+// Refund initiates a full or partial refund via POST /v3/transactions/{id}/refund.
+// GatewayTransactionID must be the Flutterwave numeric data.id from charge/verify.
+// https://developer.flutterwave.com/v3.0/docs/refunds
 func (fws *Provider) Refund(ctx context.Context, req payproviders.RefundRequest) (*payproviders.RefundResult, error) {
 	if req.GatewayTransactionID <= 0 {
 		return nil, errors.New("flutterwave transaction id is required")
@@ -183,6 +186,9 @@ func (fws *Provider) Refund(ctx context.Context, req payproviders.RefundRequest)
 	if req.CustomerNote != "" {
 		payload["comments"] = req.CustomerNote
 	}
+	if req.CallbackURL != "" {
+		payload["callbackurl"] = req.CallbackURL
+	}
 
 	endpoint := fmt.Sprintf("/transactions/%d/refund", req.GatewayTransactionID)
 	body, err := fws.client.Post(ctx, endpoint, payload)
@@ -190,21 +196,43 @@ func (fws *Provider) Refund(ctx context.Context, req payproviders.RefundRequest)
 		return nil, err
 	}
 
+	result, err := parseRefundAPIResponse(body, currency, req.Amount)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// GetRefund fetches refund status via GET /v3/refunds/{id}.
+// https://developer.flutterwave.com/v3.0/reference/get-transaction-refunds
+func (fws *Provider) GetRefund(ctx context.Context, refundID string) (*payproviders.RefundResult, error) {
+	if refundID == "" {
+		return nil, errors.New("flutterwave refund id is required")
+	}
+	body, err := fws.client.Get(ctx, "/refunds/"+url.PathEscape(refundID))
+	if err != nil {
+		return nil, err
+	}
+	return parseRefundAPIResponse(body, payproviders.DefaultCurrency, 0)
+}
+
+func parseRefundAPIResponse(body []byte, currency payproviders.Currency, fallbackAmount int64) (*payproviders.RefundResult, error) {
 	var response struct {
 		Status  string `json:"status"`
 		Message string `json:"message"`
 		Data    struct {
 			ID             int64   `json:"id"`
+			TxID           int64   `json:"tx_id"`
 			AmountRefunded float64 `json:"amount_refunded"`
 			Status         string  `json:"status"`
 			FlwRef         string  `json:"flw_ref"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(body, &response); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+		return nil, fmt.Errorf("failed to unmarshal refund response: %w", err)
 	}
 	if response.Status != "success" {
-		return nil, fmt.Errorf("flutterwave refund failed: %s", response.Message)
+		return nil, fmt.Errorf("flutterwave refund request failed: %s", response.Message)
 	}
 
 	raw, _ := json.Marshal(response.Data)
@@ -212,19 +240,25 @@ func (fws *Provider) Refund(ctx context.Context, req payproviders.RefundRequest)
 	_ = json.Unmarshal(raw, &rawMap)
 
 	ref := response.Data.FlwRef
-	if ref == "" {
-		ref = fmt.Sprintf("%d", response.Data.ID)
+	idStr := ""
+	if response.Data.ID > 0 {
+		idStr = fmt.Sprintf("%d", response.Data.ID)
+		if ref == "" {
+			ref = idStr
+		}
 	}
 
 	amount := payproviders.MinorFromGatewayAmount(response.Data.AmountRefunded, currency, payproviders.NameFlutterwave)
-	if amount == 0 && req.Amount > 0 {
-		amount = req.Amount
+	if amount == 0 && fallbackAmount > 0 {
+		amount = fallbackAmount
 	}
 
 	return &payproviders.RefundResult{
+		ID:        idStr,
 		Reference: ref,
 		Status:    payproviders.ParseRefundStatus(response.Data.Status),
 		Amount:    amount,
+		Currency:  currency,
 		Raw:       rawMap,
 	}, nil
 }
@@ -299,9 +333,16 @@ func (s *Provider) ValidateAccount(ctx context.Context, accountNumber, bankCode 
 }
 
 func (fws *Provider) ParseWebhook(payload []byte) (*payproviders.WebhookEvent, error) {
+	// Refund webhooks (when enabled) use a flat payload without event/data.
+	// https://developer.flutterwave.com/v3.0/docs/refunds
+	if event, ok := parseRefundWebhook(payload); ok {
+		return event, nil
+	}
+
 	var webhook struct {
 		Event string `json:"event"`
 		Data  struct {
+			ID                int64          `json:"id"`
 			TxRef             string         `json:"tx_ref"`
 			Amount            float64        `json:"amount"`
 			Status            string         `json:"status"`
@@ -313,16 +354,17 @@ func (fws *Provider) ParseWebhook(payload []byte) (*payproviders.WebhookEvent, e
 	if err := json.Unmarshal(payload, &webhook); err != nil {
 		return nil, fmt.Errorf("failed to parse flutterwave webhook: %w", err)
 	}
+	if webhook.Event == "" && webhook.Data.TxRef == "" {
+		return nil, errors.New("unrecognized flutterwave webhook payload")
+	}
 
 	raw, _ := json.Marshal(webhook)
 	var rawMap map[string]any
 	_ = json.Unmarshal(raw, &rawMap)
 
+	// Trust data.status — charge.completed fires for both success and failure.
 	status := payproviders.ParsePaymentStatus(webhook.Data.Status)
-	switch webhook.Event {
-	case "charge.completed":
-		status = payproviders.PaymentStatusSuccess
-	case "charge.failed":
+	if status == payproviders.PaymentStatusUnknown && webhook.Event == "charge.failed" {
 		status = payproviders.PaymentStatusFailed
 	}
 
@@ -346,6 +388,70 @@ func (fws *Provider) ParseWebhook(payload []byte) (*payproviders.WebhookEvent, e
 	}
 
 	return event, nil
+}
+
+// parseRefundWebhook handles Flutterwave refund completion payloads.
+func parseRefundWebhook(payload []byte) (*payproviders.WebhookEvent, bool) {
+	var refund struct {
+		ID              int64   `json:"id"`
+		AmountRefunded  float64 `json:"AmountRefunded"`
+		AmountRefunded2 float64 `json:"amount_refunded"`
+		Status          string  `json:"status"`
+		FlwRef          string  `json:"FlwRef"`
+		FlwRef2         string  `json:"flw_ref"`
+		TransactionID   int64   `json:"TransactionId"`
+		TransactionID2  int64   `json:"transaction_id"`
+		Comments        string  `json:"comments"`
+		Event           string  `json:"event"`
+	}
+	if err := json.Unmarshal(payload, &refund); err != nil {
+		return nil, false
+	}
+	// Charge webhooks have event + nested data; refunds are flat with AmountRefunded.
+	amount := refund.AmountRefunded
+	if amount == 0 {
+		amount = refund.AmountRefunded2
+	}
+	if amount == 0 && refund.ID == 0 {
+		return nil, false
+	}
+	// Require refund-looking fields (not a charge.completed envelope).
+	if refund.Event != "" {
+		return nil, false
+	}
+	flwRef := refund.FlwRef
+	if flwRef == "" {
+		flwRef = refund.FlwRef2
+	}
+	txID := refund.TransactionID
+	if txID == 0 {
+		txID = refund.TransactionID2
+	}
+	if amount == 0 && flwRef == "" && txID == 0 {
+		return nil, false
+	}
+
+	raw, _ := json.Marshal(refund)
+	var rawMap map[string]any
+	_ = json.Unmarshal(raw, &rawMap)
+
+	refundStatus := payproviders.ParseRefundStatus(refund.Status)
+	event := &payproviders.WebhookEvent{
+		Kind:            payproviders.WebhookKindRefund,
+		EventType:       "refund." + string(refundStatus),
+		Reference:       flwRef,
+		RefundReference: flwRef,
+		RefundID:        refund.ID,
+		Amount:          payproviders.MinorFromGatewayAmount(amount, payproviders.DefaultCurrency, payproviders.NameFlutterwave),
+		RefundStatus:    refundStatus,
+		GatewayResponse: refund.Comments,
+		RawData:         rawMap,
+	}
+	// Original charge id so callers can resolve the payment transaction.
+	if txID > 0 {
+		event.TransactionReference = fmt.Sprintf("%d", txID)
+	}
+	return event, true
 }
 
 var _ payproviders.Provider = (*Provider)(nil)

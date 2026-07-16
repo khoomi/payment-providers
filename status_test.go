@@ -35,8 +35,11 @@ func TestParseRefundStatus(t *testing.T) {
 		want payproviders.RefundStatus
 	}{
 		{"pending", payproviders.RefundStatusPending},
+		{"pending-momo", payproviders.RefundStatusPending},
 		{"processed", payproviders.RefundStatusProcessed},
-		{"completed", payproviders.RefundStatusProcessed},
+		{"completed", payproviders.RefundStatusProcessing}, // FW: initiated, not disbursed
+		{"completed-bank-transfer", payproviders.RefundStatusProcessed},
+		{"completed-momo", payproviders.RefundStatusProcessed},
 		{"failed", payproviders.RefundStatusFailed},
 		{"weird", payproviders.RefundStatusUnknown},
 	}

@@ -52,3 +52,36 @@ func TestValidateWebhookSignature(t *testing.T) {
 		t.Fatal("expected invalid webhook hash")
 	}
 }
+
+func TestParseWebhook_RefundCompleted(t *testing.T) {
+	payload := []byte(`{
+		"id": 89074,
+		"AmountRefunded": 5000,
+		"status": "completed",
+		"FlwRef": "flw-ref-1",
+		"TransactionId": 8784082,
+		"comments": "order cancelled"
+	}`)
+
+	p := flutterwave.New(flutterwave.Config{SecretKey: "test", WebhookHash: "hash"})
+	event, err := p.ParseWebhook(payload)
+	if err != nil {
+		t.Fatalf("ParseWebhook: %v", err)
+	}
+	if event.Kind != payproviders.WebhookKindRefund {
+		t.Fatalf("kind %q, want refund", event.Kind)
+	}
+	// Flat refund webhook sample uses status "completed" (initiated).
+	if event.RefundStatus != payproviders.RefundStatusProcessing {
+		t.Fatalf("status %q, want processing", event.RefundStatus)
+	}
+	if event.RefundID != 89074 {
+		t.Fatalf("refund id %d, want 89074", event.RefundID)
+	}
+	if event.TransactionReference != "8784082" {
+		t.Fatalf("transaction ref %q, want 8784082", event.TransactionReference)
+	}
+	if event.Amount != 500000 {
+		t.Fatalf("amount %d, want 500000 minor units", event.Amount)
+	}
+}

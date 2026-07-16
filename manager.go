@@ -25,10 +25,12 @@ func (m *Manager) Get(name Name) (Provider, error) {
 	if m == nil {
 		return nil, fmt.Errorf("payment manager is not configured")
 	}
-	if p, ok := m.providers[name]; ok && p != nil {
-		return p, nil
+	// Empty name → default only. Never silently substitute another gateway when
+	// the caller asked for a specific provider (e.g. flutterwave → paystack).
+	if name == "" {
+		name = m.defaultProvider
 	}
-	if p, ok := m.providers[m.defaultProvider]; ok && p != nil {
+	if p, ok := m.providers[name]; ok && p != nil {
 		return p, nil
 	}
 	return nil, fmt.Errorf("selected payment provider %v is not available", name)

@@ -91,7 +91,8 @@ func (c *HTTPClient) doRequest(ctx context.Context, method, endpoint string, bod
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	if resp.StatusCode != http.StatusOK {
+	// 200 OK and 201 Created are both treated as success.
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		return nil, fmt.Errorf("%v API error: status %d, body: %s", c.name, resp.StatusCode, string(respBody))
 	}
 
