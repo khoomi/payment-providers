@@ -302,6 +302,7 @@ func (fws *Provider) ParseWebhook(payload []byte) (*payproviders.WebhookEvent, e
 	var webhook struct {
 		Event string `json:"event"`
 		Data  struct {
+			ID                int64          `json:"id"`
 			TxRef             string         `json:"tx_ref"`
 			Amount            float64        `json:"amount"`
 			Status            string         `json:"status"`
@@ -318,11 +319,9 @@ func (fws *Provider) ParseWebhook(payload []byte) (*payproviders.WebhookEvent, e
 	var rawMap map[string]any
 	_ = json.Unmarshal(raw, &rawMap)
 
+	// Trust data.status — charge.completed fires for both success and failure.
 	status := payproviders.ParsePaymentStatus(webhook.Data.Status)
-	switch webhook.Event {
-	case "charge.completed":
-		status = payproviders.PaymentStatusSuccess
-	case "charge.failed":
+	if status == payproviders.PaymentStatusUnknown && webhook.Event == "charge.failed" {
 		status = payproviders.PaymentStatusFailed
 	}
 

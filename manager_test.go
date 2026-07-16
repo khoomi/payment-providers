@@ -34,6 +34,7 @@ func (s stubProvider) ParseWebhook([]byte) (*payproviders.WebhookEvent, error) {
 func TestManager_GetProvider(t *testing.T) {
 	mgr := payproviders.NewManager(payproviders.NamePaystack)
 	mgr.Register(stubProvider{name: payproviders.NamePaystack})
+	mgr.Register(stubProvider{name: payproviders.NameFlutterwave})
 
 	got, err := mgr.Get(payproviders.NamePaystack)
 	if err != nil || got.Name() != payproviders.NamePaystack {
@@ -41,14 +42,25 @@ func TestManager_GetProvider(t *testing.T) {
 	}
 
 	got, err = mgr.Get(payproviders.NameFlutterwave)
+	if err != nil || got.Name() != payproviders.NameFlutterwave {
+		t.Fatalf("Get(flutterwave): %v", err)
+	}
+
+	// Empty name uses default.
+	got, err = mgr.Get("")
 	if err != nil || got.Name() != payproviders.NamePaystack {
-		t.Fatalf("Get(flutterwave) should fall back to paystack, got %v err %v", got, err)
+		t.Fatalf("Get(\"\") should use default paystack, got %v err %v", got, err)
 	}
 }
 
 func TestManager_GetMissingProvider(t *testing.T) {
 	mgr := payproviders.NewManager(payproviders.NamePaystack)
+	mgr.Register(stubProvider{name: payproviders.NamePaystack})
+	// Must not silently fall back to paystack when flutterwave was requested.
 	if _, err := mgr.Get(payproviders.NameFlutterwave); err == nil {
-		t.Fatal("expected error when no providers registered")
+		t.Fatal("expected error when flutterwave is not registered")
+	}
+	if _, err := mgr.Get(payproviders.NameFlutterwave); err == nil {
+		t.Fatal("expected error when no providers registered for name")
 	}
 }
