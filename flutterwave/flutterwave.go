@@ -129,13 +129,15 @@ func (fws *Provider) Verify(ctx context.Context, reference string) (*payprovider
 		Status  string `json:"status"`
 		Message string `json:"message"`
 		Data    struct {
-			ID        int64   `json:"id"`
-			Status    string  `json:"status"`
-			TxRef     string  `json:"tx_ref"`
-			Amount    float64 `json:"amount"`
-			Currency  string  `json:"currency"`
-			CreatedAt string  `json:"created_at"`
-			Processor string  `json:"processor_response"`
+			ID          int64          `json:"id"`
+			Status      string         `json:"status"`
+			TxRef       string         `json:"tx_ref"`
+			Amount      float64        `json:"amount"`
+			Currency    string         `json:"currency"`
+			CreatedAt   string         `json:"created_at"`
+			Processor   string         `json:"processor_response"`
+			PaymentType string         `json:"payment_type"`
+			Card        map[string]any `json:"card"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(body, &response); err != nil {
